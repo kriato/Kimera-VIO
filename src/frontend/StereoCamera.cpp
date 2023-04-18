@@ -41,9 +41,9 @@ StereoCamera::StereoCamera(const CameraParams& left_cam_params,
       original_right_camera_(nullptr),
       undistorted_rectified_stereo_camera_impl_(),
       stereo_calibration_(nullptr),
-      stereo_baseline_(0.0),
       left_cam_undistort_rectifier_(nullptr),
-      right_cam_undistort_rectifier_(nullptr) {
+      right_cam_undistort_rectifier_(nullptr),
+      stereo_baseline_(0.0) {
   computeRectificationParameters(left_cam_params,
                                  right_cam_params,
                                  &R1_,
@@ -221,12 +221,12 @@ void StereoCamera::backProjectDisparityTo3DManual(const cv::Mat& disparity_img,
   double Q33 = Q_.at<double>(3, 3);  // (c_x - c_x') / T_x
 
   // Get xyz from disparity
-  for (size_t i = 0u; i < disparity_img.rows; i++) {
+  for (int i = 0u; i < disparity_img.rows; i++) {
     // Loop over rows
     const float* disp_ptr = disparity_img.ptr<float>(i);
     cv::Vec3f* xyz_ptr = depth->ptr<cv::Vec3f>(i);
 
-    for (size_t j = 0u; j < disparity_img.cols; j++) {
+    for (int j = 0u; j < disparity_img.cols; j++) {
       // Loop over cols
       const float pw = 1.0f / (disp_ptr[j] * Q32 + Q33);
 
@@ -244,8 +244,23 @@ void StereoCamera::undistortRectifyLeftKeypoints(
     StatusKeypointsCV* status_keypoints_rectified) const {
   KeypointsCV undistorted_rectified_keypoints;
   CHECK(left_cam_undistort_rectifier_);
-  left_cam_undistort_rectifier_->undistortRectifyKeypoints(
-      keypoints, &undistorted_rectified_keypoints);
+  switch (original_left_camera_->getCamParams().camera_model_) {
+    case CameraModel::PINHOLE: {
+      left_cam_undistort_rectifier_->undistortRectifyKeypoints(
+          keypoints, &undistorted_rectified_keypoints);
+    } break;
+    case CameraModel::OMNI: {
+      // TODO(marcus): after gtsam camera model, this disappears and
+      // the switch happens in UndistorterRectifier.
+      Camera::UndistortKeypointsOmni(keypoints,
+                                     original_left_camera_->getCamParams(),
+                                     original_left_camera_->getCamParams().K_,
+                                     &undistorted_rectified_keypoints);
+    } break;
+    default: {
+      LOG(FATAL) << "Camera: Unrecognized camera model.";
+    }
+  }
   left_cam_undistort_rectifier_->checkUndistortedRectifiedLeftKeypoints(
       keypoints, undistorted_rectified_keypoints, status_keypoints_rectified);
 }
@@ -260,7 +275,7 @@ void StereoCamera::distortUnrectifyRightKeypoints(
 void StereoCamera::undistortRectifyStereoFrame(StereoFrame* stereo_frame) const {
   CHECK_NOTNULL(stereo_frame);
   //! Warn if stupid behavior from user
-  LOG_IF(WARNING, stereo_frame->isRectified())
+  VLOG_IF(1, stereo_frame->isRectified())
       << "Rectifying already rectified stereo frame ...";
 
   //! Left img
@@ -355,6 +370,12 @@ void StereoCamera::computeRectificationParameters(
           *Q,
           // TODO: Flag to maximise area???
           cv::CALIB_ZERO_DISPARITY);
+    } break;
+    case DistortionModel::OMNI: {
+      LOG(FATAL)
+          << "UndistorterRectifier: Attempting to initialize for OMNI "
+             "camera, but undistortion is implemented at camera level. "
+             "Use a mono camera instead.";
     } break;
     default: {
       LOG(FATAL) << "Unknown DistortionModel: "

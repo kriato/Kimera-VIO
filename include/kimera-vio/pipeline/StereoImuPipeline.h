@@ -34,8 +34,9 @@ class StereoImuPipeline : public Pipeline {
      * @param displayer Optional displayer for visualizing 2D results
      */
   StereoImuPipeline(const VioParams& params,
-                 Visualizer3D::UniquePtr&& visualizer = nullptr,
-                 DisplayBase::UniquePtr&& displayer = nullptr);
+                    Visualizer3D::UniquePtr&& visualizer = nullptr,
+                    DisplayBase::UniquePtr&& displayer = nullptr,
+                    PreloadedVocab::Ptr&& preloaded_vocab = nullptr);
 
   ~StereoImuPipeline() = default;
 
@@ -55,8 +56,8 @@ class StereoImuPipeline : public Pipeline {
     // doesn't work in online/parallel because other threads are accessing 
     // data_provider_module_ when it's been temporarily released to the stereo
     // version. Checks fail for that reason.
-    // This fix is really bad because it totally bypasses the rules of 
-    // unique_ptr
+    // This fix is bad because it totally bypasses the rules of 
+    // unique_ptr, but no better solution has been found yet.
     dynamic_cast<StereoDataProviderModule*>(data_provider_module_.get())
         ->fillRightFrameQueue(std::move(right_frame));
   }
@@ -76,8 +77,8 @@ class StereoImuPipeline : public Pipeline {
     // doesn't work in online/parallel because other threads are accessing
     // data_provider_module_ when it's been temporarily released to the stereo
     // version. Checks fail for that reason.
-    // This fix is really bad because it totally bypasses the rules of
-    // unique_ptr
+    // This fix is bad because it totally bypasses the rules of
+    // unique_ptr, but no better solution has been found yet.
     dynamic_cast<StereoDataProviderModule*>(data_provider_module_.get())
         ->fillRightFrameQueueBlockingIfFull(std::move(right_frame));
   }

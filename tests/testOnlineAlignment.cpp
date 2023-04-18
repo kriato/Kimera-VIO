@@ -22,6 +22,7 @@
 #include "kimera-vio/imu-frontend/ImuFrontend.h"
 #include "kimera-vio/initial/OnlineGravityAlignment.h"
 #include "kimera-vio/utils/ThreadsafeImuBuffer.h"
+#include "kimera-vio/utils/UtilsNumerical.h"
 
 DECLARE_string(test_data_path);
 
@@ -130,7 +131,7 @@ class OnlineAlignmentFixture : public ::testing::Test {
       it++;
     }
     // Set initial pose to identity as we compute all relative to it
-    estimated_poses_[0] = gtsam::Pose3::identity();
+    estimated_poses_[0] = gtsam::Pose3();
   }
 
   void initializeImuParams(ImuParams* imu_params) const {

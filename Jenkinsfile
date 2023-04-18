@@ -57,7 +57,7 @@ pipeline {
               steps {
                 catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
                   wrap([$class: 'Xvfb']) {
-                    sh 'cd build && ./testKimeraVIO --gtest_output="xml:testresults.xml"'
+                    sh 'cd build && ./testKimeraVIO --gtest_output="xml:testresults.xml" --minloglevel=0 -v=1'
 
                     // Process the CTest xml output
                     junit 'build/testresults.xml'
@@ -106,7 +106,7 @@ pipeline {
                          yaxis: 'Time [ms]'
 
                     // Publish HTML website with plotly and pdfs of VIO performance
-                    publishHTML([allowMissing: true, alwaysLinkToLastBuild: false, keepAll: true, reportDir: 'website/data', reportFiles: 'vio_ape_euroc.html, detailed_performance.html, datasets.html, Frontend.html', reportName: 'VIO Euroc Performance Report', reportTitles: 'Euroc Performance Overview, Euroc Performance Detailed, Raw VIO Output, VIO Frontend Stats'])
+                    publishHTML([allowMissing: true, alwaysLinkToLastBuild: false, keepAll: true, reportDir: 'website/data', reportFiles: 'vio_ape_euroc.html, detailed_performance.html, datasets.html, frontend.html', reportName: 'VIO Euroc Performance Report', reportTitles: 'Euroc Performance Overview, Euroc Performance Detailed, Raw VIO Output, VIO Frontend Stats'])
 
                     // Archive the website
                     archiveArtifacts (
@@ -165,7 +165,53 @@ pipeline {
             stage('Test') {
               steps {
                 wrap([$class: 'Xvfb']) {
-                  sh 'cd build && ./testKimeraVIO --gtest_output="xml:testresults.xml"'
+                  sh 'cd build && ./testKimeraVIO --gtest_output="xml:testresults.xml" --minloglevel=0 -v=1'
+
+                  // Process the CTest xml output
+                  junit 'build/testresults.xml'
+                }
+              }
+            }
+          }
+        }
+        stage('Ubuntu 20.04') {
+          agent {
+              dockerfile {
+                filename 'Dockerfile_20_04'
+                  args '-e WORKSPACE=$WORKSPACE'
+            }
+          }
+          environment {
+            evaluator="/root/Kimera-VIO-Evaluation"
+          }
+          stages {
+            stage('Build Release') {
+              steps {
+                slackSend color: 'good',
+                          message: "Started Build <${env.BUILD_URL}|#${env.BUILD_NUMBER}> - Branch <${env.GIT_URL}|${env.GIT_BRANCH}>."
+               cmakeBuild buildDir: 'build', buildType: 'Release', cleanBuild: false,
+                          cmakeArgs: '-DEIGEN3_INCLUDE_DIR="/usr/local/include/gtsam/3rdparty/Eigen"\
+                            -DCMAKE_CXX_FLAGS="\
+                            -Wno-comment \
+                            -Wno-maybe-uninitialized \
+                            -Wno-parentheses \
+                            -Wno-pragma-once-outside-header \
+                            -Wno-reorder \
+                            -Wno-return-type \
+                            -Wno-sign-compare \
+                            -Wno-unused-but-set-variable \
+                            -Wno-unused-function \
+                            -Wno-unused-parameter \
+                            -Wno-unused-value \
+                            -Wno-unused-variable"',
+                          generator: 'Unix Makefiles', installation: 'InSearchPath',
+                          sourceDir: '.', steps: [[args: '-j 4']]
+              }
+            }
+            stage('Test') {
+              steps {
+                wrap([$class: 'Xvfb']) {
+                  sh 'cd build && ./testKimeraVIO --gtest_output="xml:testresults.xml" --minloglevel=0 -v=1'
 
                   // Process the CTest xml output
                   junit 'build/testresults.xml'
@@ -191,7 +237,7 @@ pipeline {
       node(null) {
         echo 'Success!'
         slackSend color: 'good',
-                  message: "Successful Build <${env.BUILD_URL}|#${env.BUILD_NUMBER}> - Branch ${env.GIT_BRANCH} finished in ${currentBuild.durationString}."
+                  message: "Successful Build <${env.BUILD_URL}|#${env.BUILD_NUMBER}> - Branch ${env.BRANCH_NAME} finished in ${currentBuild.durationString}."
       }
     }
     failure {

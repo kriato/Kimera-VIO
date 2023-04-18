@@ -29,7 +29,7 @@
 #include "kimera-vio/common/VioNavState.h"
 #include "kimera-vio/dataprovider/MonoDataProviderModule.h"
 #include "kimera-vio/frontend/VisionImuFrontendModule.h"
-#include "kimera-vio/loopclosure/LoopClosureDetector.h"
+#include "kimera-vio/loopclosure/LcdModule.h"
 #include "kimera-vio/mesh/MesherModule.h"
 #include "kimera-vio/utils/ThreadsafeQueue.h"
 #include "kimera-vio/visualizer/Display.h"
@@ -84,6 +84,14 @@ class Pipeline {
     data_provider_module_->fillImuQueue(imu_measurements);
   }
 
+  inline void fillExternalOdomQueue(
+      const ExternalOdomMeasurement& odom_measurement) {
+    CHECK(data_provider_module_);
+    data_provider_module_->fillExternalOdometryQueue(odom_measurement);
+  }
+
+  inline LcdModule* getLcdModule() const { return lcd_module_.get(); }
+
  public:
   /**
    * @brief spin Spin the whole pipeline by spinning the data provider
@@ -127,6 +135,20 @@ class Pipeline {
                                     const bool& print_stats = false);
 
   /**
+   * @brief spin pipeline until all data has been processed
+   * Shutdown the pipeline once all data has been consumed, or if the Backend
+   * has died unexpectedly.
+   * @param data_done_cb threadsafe callback to check if the data
+   * provider has finished queueing all avaiable data
+   * @param sleep_time_ms period of time between checks of vio status.
+   * @return true if shutdown succesful, false otherwise (only returns
+   * if running in sequential mode, or if shutdown happens).
+   */
+  virtual bool waitForShutdown(const std::function<bool()>& data_done_cb,
+                               const int& sleep_time_ms = 501,
+                               const bool& print_stats = false);
+
+  /**
    * @brief shutdown Shutdown processing pipeline: stops and joins threads,
    * stops queues. And closes logfiles.
    */
@@ -161,7 +183,7 @@ class Pipeline {
    * @brief Sequential pipeline runner.
    * Must be written in the derived class because it references the data'
    * provider module.
-  */
+   */
   virtual void spinSequential();
 
  protected:
@@ -171,7 +193,7 @@ class Pipeline {
 
   virtual bool isInitialized() const {
     return vio_frontend_module_->isInitialized() &&
-            vio_backend_module_->isInitialized();
+           vio_backend_module_->isInitialized();
   }
 
   //! Shutdown for in case Backend fails (this is done for a graceful shutdown).
@@ -222,8 +244,7 @@ class Pipeline {
   virtual void joinThreads();
 
   /// Join a single thread.
-  virtual void joinThread(const std::string& thread_name,
-                          std::thread* thread);
+  virtual void joinThread(const std::string& thread_name, std::thread* thread);
 
  protected:
   // VIO parameters
